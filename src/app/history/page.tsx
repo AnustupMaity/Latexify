@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 export default async function HistoryPage() {
   let documents: any[] = [];
   try {
-    const res = await fetch("http://localhost:8000/api/documents?limit=50", { cache: "no-store" });
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const res = await fetch(`${apiBase}/api/documents?limit=50`, { cache: "no-store" });
     if (res.ok) {
       documents = await res.json();
     }

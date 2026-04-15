@@ -2,6 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, Loader2 } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 type GenerationState = "idle" | "generating" | "success" | "error";
@@ -25,7 +28,7 @@ export default function EditorPage() {
     setLatexCode(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/generate-and-compile", {
+      const res = await fetch(`${API_BASE}/api/generate-and-compile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

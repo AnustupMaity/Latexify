@@ -2,10 +2,12 @@
 
 import { LogOut } from "lucide-react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function LogoutButton() {
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:8000/api/auth/logout", { method: "POST" });
+      await fetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
     } catch (e) {
       console.error("Logout failed", e);
     }

@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, Mail, KeyRound } from "lucide-react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -18,7 +20,7 @@ export default function LoginPage() {
     setErrorMsg(null);
     
     try {
-      const res = await fetch("http://localhost:8000/api/auth/send-otp", {
+      const res = await fetch(`${API_BASE}/api/auth/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email })
@@ -44,7 +46,7 @@ export default function LoginPage() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/auth/verify-otp", {
+      const res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, token: otp })
