@@ -35,8 +35,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose the port Render / cloud platform will map to
-EXPOSE 8000
+EXPOSE 10000
 
-# Use shell form (not exec form) so $PORT env var is expanded at runtime.
-# Render sets PORT=10000; locally it defaults to 8000.
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Default port to 10000 (Render's default). Override locally with -e PORT=8000.
+ENV PORT=10000
+
+# Exec form with shell expansion via sh -c so $PORT is resolved at runtime
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]
