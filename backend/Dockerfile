@@ -37,5 +37,6 @@ COPY . .
 # Expose the port Render / cloud platform will map to
 EXPOSE 8000
 
-# Run FastAPI with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form (not exec form) so $PORT env var is expanded at runtime.
+# Render sets PORT=10000; locally it defaults to 8000.
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
