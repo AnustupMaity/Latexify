@@ -1,0 +1,12 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+*.log
+debug_brevo.py
+get_senders.py
+check_db.py
+create_table.py

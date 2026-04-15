@@ -1,0 +1,65 @@
+# ========================
+# LaTeXify AI — Root .gitignore
+# ========================
+
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp/debug scripts
+backend/debug_brevo.py
+backend/get_senders.py
+backend/check_db.py
+backend/create_table.py
+
+# ========================
+# Python / FastAPI Backend
+# ========================
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.Python
+backend/venv/
+backend/.venv/
+backend/env/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/htmlcov/
+backend/.coverage
+backend/celerybeat-schedule
+
+# ========================
+# Next.js Frontend
+# ========================
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnp
+frontend/.pnp.js
+frontend/.vercel
+
+# TypeScript
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
