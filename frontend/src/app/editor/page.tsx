@@ -9,6 +9,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type GenerationState = "idle" | "generating" | "success" | "error" | "loading_history";
 
 export default function EditorPage() {
+  const [title, setTitle] = useState("Untitled Document");
   const [inputText, setInputText] = useState("");
   const [instructions, setInstructions] = useState("");
   const [state, setState] = useState<GenerationState>("idle");
@@ -30,6 +31,7 @@ export default function EditorPage() {
           .then((res) => res.json())
           .then((data) => {
             if (data && !data.detail) {
+              setTitle(data.title || "Untitled Document");
               setInputText(data.input_text || "");
               setInstructions(data.instructions || "");
               setLatexCode(data.latex_code || "");
@@ -68,6 +70,7 @@ export default function EditorPage() {
           input_text: inputText,
           instructions: instructions,
           template: "standard",
+          title: title,
         }),
       });
 
@@ -98,7 +101,7 @@ export default function EditorPage() {
     if (!pdfBase64) return;
     const link = document.createElement("a");
     link.href = `data:application/pdf;base64,${pdfBase64}`;
-    link.download = "latexify_document.pdf";
+    link.download = `${title.replace(/\s+/g, '_') || 'latexify_document'}.pdf`;
     link.click();
   };
 
@@ -107,7 +110,7 @@ export default function EditorPage() {
     const blob = new Blob([latexCode], { type: "text/plain" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "latexify_document.tex";
+    link.download = `${title.replace(/\s+/g, '_') || 'latexify_document'}.tex`;
     link.click();
   };
 
@@ -122,7 +125,17 @@ export default function EditorPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">Untitled Document.tex</span>
+            <div className="flex items-center">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="text-sm font-semibold bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 -ml-1 text-foreground"
+                style={{ width: `${Math.max(title.length + 1, 10)}ch` }}
+                placeholder="Untitled Document"
+              />
+              <span className="text-sm font-semibold text-muted-foreground mr-1">.tex</span>
+            </div>
             <span className="text-xs text-muted-foreground">
               {state === "success" && retries > 0
                 ? `✅ Compiled after ${retries} auto-fix${retries > 1 ? "es" : ""}`

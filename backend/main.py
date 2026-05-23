@@ -37,6 +37,7 @@ class GenerateRequest(BaseModel):
     input_text: str
     instructions: str = ""
     template: str = "standard"
+    title: str | None = None
 
 class GenerateResponse(BaseModel):
     latex: str
@@ -214,8 +215,8 @@ def _run_ai_generation(prompt: str) -> str:
 def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_base64: str | None = None):
     if not supabase: return
     try:
-        # Simplistic title extraction from request
-        title = req.input_text[:20].strip() + "..." if len(req.input_text) > 20 else "Untitled"
+        # Simplistic title extraction from request, or use provided title
+        title = req.title.strip() if req.title and req.title.strip() else (req.input_text[:20].strip() + "..." if len(req.input_text) > 20 else "Untitled Document")
         data = {
             "title": title,
             "input_text": req.input_text,
