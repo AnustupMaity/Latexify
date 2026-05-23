@@ -211,7 +211,7 @@ def _run_ai_generation(prompt: str) -> str:
                 pass
     return extract_latex(call_huggingface_fallback(prompt))
 
-def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str):
+def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_base64: str | None = None):
     if not supabase: return
     try:
         # Simplistic title extraction from request
@@ -221,6 +221,7 @@ def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str):
             "input_text": req.input_text,
             "instructions": req.instructions,
             "latex_code": latex_code,
+            "pdf_base64": pdf_base64,
             "status": status
         }
         supabase.table("Documents").insert(data).execute()
@@ -251,7 +252,7 @@ def generate_and_compile(req: GenerateRequest):
         compile_res_model = compile_latex(CompileRequest(latex_code=current_latex))
         
         if compile_res_model.success:
-            _save_to_supabase(req, current_latex, "success")
+            _save_to_supabase(req, current_latex, "success", compile_res_model.pdf_base64)
             return GenerateCompileResponse(
                 success=True,
                 final_latex=current_latex,
@@ -380,6 +381,27 @@ def get_documents(limit: int = 10):
             except Exception as e2:
                 print("Warning: Documents/documents table not found. Run the SQL migration in Supabase Dashboard.")
                 return []
+        raise HTTPException(status_code=500, detail=err)
+
+@app.get("/api/documents/{doc_id}")
+def get_document(doc_id: int):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    try:
+        response = supabase.table("Documents").select("*").eq("id", doc_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return response.data[0]
+    except Exception as e:
+        err = str(e)
+        if "relation" in err or "does not exist" in err or "schema cache" in err:
+            try:
+                response = supabase.table("documents").select("*").eq("id", doc_id).execute()
+                if not response.data:
+                    raise HTTPException(status_code=404, detail="Document not found")
+                return response.data[0]
+            except Exception:
+                raise HTTPException(status_code=404, detail="Document not found / Table missing")
         raise HTTPException(status_code=500, detail=err)
 
 @app.post("/api/auth/logout", response_model=AuthResponse)

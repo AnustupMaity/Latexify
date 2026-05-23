@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, Loader2 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type GenerationState = "idle" | "generating" | "success" | "error";
+type GenerationState = "idle" | "generating" | "success" | "error" | "loading_history";
 
 export default function EditorPage() {
   const [inputText, setInputText] = useState("");
@@ -18,6 +18,40 @@ export default function EditorPage() {
   const [retries, setRetries] = useState(0);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
+
+  useEffect(() => {
+    // Check if ID is in the URL to load a specific document
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const docId = params.get("id");
+      if (docId) {
+        setState("loading_history");
+        fetch(`${API_BASE}/api/documents/${docId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && !data.detail) {
+              setInputText(data.input_text || "");
+              setInstructions(data.instructions || "");
+              setLatexCode(data.latex_code || "");
+              if (data.pdf_base64) {
+                setPdfBase64(data.pdf_base64);
+                setState("success");
+              } else if (data.latex_code && data.status === "success") {
+                setShowSource(true);
+                setState("success");
+              } else {
+                setState("error");
+              }
+            } else {
+              setState("idle");
+            }
+          })
+          .catch(() => {
+            setState("idle");
+          });
+      }
+    }
+  }, []);
 
   const handleGenerate = async () => {
     if (!inputText.trim()) return;
@@ -200,8 +234,16 @@ export default function EditorPage() {
             </button>
           </div>
 
-          {/* Content area */}
-          <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto hidden-scrollbar">
+            {/* CONTENT AREA */}
+            <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto hidden-scrollbar">
+            {/* LOADING HISTORY */}
+            {state === "loading_history" && (
+              <div className="w-full max-w-2xl bg-white rounded flex-1 min-h-[600px] shadow-2xl flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
+                <p className="text-sm text-gray-500">Loading document...</p>
+              </div>
+            )}
+
             {/* IDLE */}
             {state === "idle" && (
               <div className="w-full max-w-2xl bg-white rounded flex-1 min-h-[600px] shadow-2xl flex flex-col items-center justify-center text-gray-400">

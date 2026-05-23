@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public."Documents" (
     input_text text,
     instructions text,
     latex_code text,
+    pdf_base64 text,
     status text,
     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public."Documents" (
 --     input_text text,
 --     instructions text,
 --     latex_code text,
+--     pdf_base64 text,
 --     status text,
 --     created_at timestamp with time zone default timezone('utc'::text, now()) not null
 -- );
