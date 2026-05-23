@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+import pypandoc
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -51,10 +52,23 @@ def extract_latex(text: str) -> str:
         return match.group(1).strip()
     return text.strip()
 
-def build_prompt(req: GenerateRequest) -> str:
-    return f"""
+def build_prompt(req: GenerateRequest, base_latex: str = None) -> str:
+    if base_latex:
+        return f"""
+You are an expert LaTeX developer. I have structurally converted the user's content into safe baseline LaTeX.
+Your job is to apply the exact document constraints/styles below while retaining the underlying structure.
+DO NOT break equations or lists. Output ONLY the raw LaTeX code starting with \\documentclass. DO NOT include markdown code fences (```latex).
+
+TEMPLATE TYPE: {req.template}
+USER INSTRUCTIONS: {req.instructions}
+
+BASE LATEX STRUCTURE (Enhance this according to instructions):
+{base_latex}
+"""
+    else:
+        return f"""
 You are an expert LaTeX developer. Convert the following text into compilation-ready, high-quality LaTeX code.
-DO NOT include surrounding markdown formatting like ```latex. Output ONLY the raw LaTeX code starting with \documentclass.
+DO NOT include surrounding markdown formatting like ```latex. Output ONLY the raw LaTeX code starting with \\documentclass.
 
 TEMPLATE TYPE: {req.template}
 USER INSTRUCTIONS: {req.instructions}
@@ -87,7 +101,13 @@ def generate_latex(req: GenerateRequest):
     if not genai_client:
         raise HTTPException(status_code=500, detail="Gemini API Key not configured.")
     
-    prompt = build_prompt(req)
+    try:
+        base_latex = pypandoc.convert_text(req.input_text, 'latex', format='md')
+    except Exception as e:
+        print("Pandoc conversion failed, falling back to raw text:", e)
+        base_latex = None
+
+    prompt = build_prompt(req, base_latex)
     
     # 1. Try Gemini 2.5 Pro
     try:
@@ -238,8 +258,15 @@ def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_ba
 
 @app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
 def generate_and_compile(req: GenerateRequest):
+    # 0. Pandoc structural pass
+    try:
+        base_latex = pypandoc.convert_text(req.input_text, 'latex', format='md')
+    except Exception as e:
+        print("Pandoc conversion failed, falling back to raw text:", e)
+        base_latex = None
+
     # 1. Initial Generation
-    initial_prompt = build_prompt(req)
+    initial_prompt = build_prompt(req, base_latex)
     try:
         current_latex = _run_ai_generation(initial_prompt)
     except Exception as e:
