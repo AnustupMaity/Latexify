@@ -29,7 +29,7 @@ from supabase import create_client, Client
 genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 supabase: Client | None = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -225,7 +225,14 @@ def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str):
         }
         supabase.table("Documents").insert(data).execute()
     except Exception as e:
-        print(f"Failed to save to Supabase: {e}")
+        err = str(e)
+        if "relation" in err or "does not exist" in err or "PGRST205" in err or "schema cache" in err:
+            try:
+                supabase.table("documents").insert(data).execute()
+            except Exception as e2:
+                print(f"Failed to save to Supabase fallback table 'documents': {e2}")
+        else:
+            print(f"Failed to save to Supabase: {e}")
 
 @app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
 def generate_and_compile(req: GenerateRequest):
@@ -367,8 +374,12 @@ def get_documents(limit: int = 10):
         err = str(e)
         # If table doesn't exist yet, return empty gracefully
         if "PGRST205" in err or "does not exist" in err or "schema cache" in err:
-            print("Warning: Documents table not found. Run the SQL migration in Supabase Dashboard.")
-            return []
+            try:
+                response = supabase.table("documents").select("id, title, status, created_at").order("id", desc=True).limit(limit).execute()
+                return response.data
+            except Exception as e2:
+                print("Warning: Documents/documents table not found. Run the SQL migration in Supabase Dashboard.")
+                return []
         raise HTTPException(status_code=500, detail=err)
 
 @app.post("/api/auth/logout", response_model=AuthResponse)
