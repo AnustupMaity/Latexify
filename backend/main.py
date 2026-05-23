@@ -40,6 +40,8 @@ class GenerateRequest(BaseModel):
     instructions: str = ""
     template: str = "standard"
     title: str | None = None
+    images: list[str] | None = None
+    sources: str | None = None
 
 class GenerateResponse(BaseModel):
     latex: str
@@ -62,6 +64,9 @@ DO NOT break equations or lists. Output ONLY the raw LaTeX code starting with \\
 
 TEMPLATE TYPE: {req.template}
 USER INSTRUCTIONS: {req.instructions}
+SOURCES/CITATIONS: {req.sources or 'None'}
+
+If sources are provided, ensure you include \\bibliographystyle{{plainnat}} or similar and \\bibliography{{references}} before \\end{{document}}, and cite them appropriately (e.g. \\cite{{...}}) in the text if specified.
 
 BASE LATEX STRUCTURE (Enhance this according to instructions):
 {base_latex}
@@ -73,6 +78,9 @@ DO NOT include surrounding markdown formatting like ```latex. Output ONLY the ra
 
 TEMPLATE TYPE: {req.template}
 USER INSTRUCTIONS: {req.instructions}
+SOURCES/CITATIONS: {req.sources or 'None'}
+
+If sources are provided, ensure you include \\bibliographystyle{{plainnat}} or similar and \\bibliography{{references}} before \\end{{document}}, and cite them appropriately (e.g. \\cite{{...}}) in the text if specified.
 
 TEXT CONTENT:
 {req.input_text}
@@ -220,21 +228,34 @@ class GenerateCompileResponse(BaseModel):
     retries: int = 0
     message: str
 
-def _run_ai_generation(prompt: str) -> str:
+def _run_ai_generation(prompt: str, images: list[str] | None = None) -> str:
     """Helper to run the fallback AI chain."""
+    contents = [prompt]
+    if images:
+        for b64 in images:
+            if "," in b64:
+                b64 = b64.split(",", 1)[1]
+            try:
+                img_bytes = base64.b64decode(b64)
+                contents.append(types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
+            except Exception as e:
+                print(f"Failed to decode image: {e}")
+
     if genai_client:
         try:
-            res = genai_client.models.generate_content(model='gemini-2.5-pro', contents=prompt)
+            res = genai_client.models.generate_content(model='gemini-2.5-pro', contents=contents)
             return extract_latex(res.text)
-        except Exception:
+        except Exception as e:
+            print(f"Pro fail: {e}")
             try:
                 res = genai_client.models.generate_content(
                     model='gemini-2.5-flash', 
-                    contents=prompt, 
+                    contents=contents, 
                     config=types.GenerateContentConfig(temperature=0.2)
                 )
                 return extract_latex(res.text)
-            except Exception:
+            except Exception as e:
+                print(f"Flash fail: {e}")
                 pass
     return extract_latex(call_huggingface_fallback(prompt))
 
@@ -277,6 +298,25 @@ def split_markdown_by_headings(text: str) -> list[tuple[str, str]]:
         chunks.append((f"chunk_{chunk_index}.tex", "\n".join(current_chunk)))
     return chunks
 
+def _generate_bibtex(sources: str) -> str:
+    prompt = f"""
+You are an expert academic librarian. I will provide a list of URLs, DOIs, or raw text references.
+Convert them into valid BibTeX entries. Make sure to generate appropriate citation keys.
+Output ONLY the raw BibTeX format (NO markdown formatting like ```bibtex).
+
+SOURCES:
+{sources}
+"""
+    if genai_client:
+        try:
+            res = genai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            # Remove any markdown if it leaked
+            match = re.search(r"```(?:bibtex|bib)(.*?)```", res.text, re.DOTALL | re.IGNORECASE)
+            return match.group(1).strip() if match else res.text.strip()
+        except:
+            pass
+    return ""
+
 def generate_chunk(chunk_tuple: tuple[str, str], req: GenerateRequest) -> tuple[str, str]:
     filename, content = chunk_tuple
     try:
@@ -315,6 +355,15 @@ TITLE: {req.title or 'Untitled Document'}
 def generate_and_compile(req: GenerateRequest):
     is_large = len(req.input_text) > 3000
     
+    additional_files = {}
+    if req.sources:
+        try:
+            bibtex_content = _generate_bibtex(req.sources)
+            if bibtex_content:
+                additional_files["references.bib"] = bibtex_content
+        except Exception as e:
+            print(f"Bibtex generation failed: {e}")
+
     if not is_large:
         # 0. Pandoc structural pass
         # Normal flow
@@ -326,10 +375,9 @@ def generate_and_compile(req: GenerateRequest):
 
         initial_prompt = build_prompt(req, base_latex)
         try:
-            current_latex = _run_ai_generation(initial_prompt)
+            current_latex = _run_ai_generation(initial_prompt, req.images)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Initial AI generation failed: {str(e)}")
-        additional_files = {}
     else:
         # CHUNKING FLOW
         try:
@@ -340,7 +388,8 @@ def generate_and_compile(req: GenerateRequest):
                 futures = [executor.submit(generate_chunk, c, req) for c in chunks]
                 chunk_results = [f.result() for f in concurrent.futures.as_completed(futures)]
                 
-            additional_files = {filename: content for filename, content in chunk_results}
+            for filename, content in chunk_results:
+                additional_files[filename] = content
             current_latex = generate_main_tex(list(additional_files.keys()), req)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Chunked parallel generation failed: {str(e)}")
