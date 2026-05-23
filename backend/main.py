@@ -2,6 +2,7 @@ import os
 import re
 import requests
 import pypandoc
+import concurrent.futures
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -160,6 +161,7 @@ import base64
 
 class CompileRequest(BaseModel):
     latex_code: str
+    additional_files: dict[str, str] = {}
 
 class CompileResponse(BaseModel):
     success: bool
@@ -173,6 +175,10 @@ def compile_latex(req: CompileRequest):
         tex_file_path = os.path.join(temp_dir, 'document.tex')
         with open(tex_file_path, 'w', encoding='utf-8') as f:
             f.write(req.latex_code)
+            
+        for filename, content in req.additional_files.items():
+            with open(os.path.join(temp_dir, filename), 'w', encoding='utf-8') as f:
+                f.write(content)
 
         try:
             result = subprocess.run(
@@ -256,28 +262,95 @@ def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_ba
         else:
             print(f"Failed to save to Supabase: {e}")
 
-@app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
-def generate_and_compile(req: GenerateRequest):
-    # 0. Pandoc structural pass
+def split_markdown_by_headings(text: str) -> list[tuple[str, str]]:
+    chunks = []
+    current_chunk = []
+    chunk_index = 0
+    # simple split by markdown header 1 or 2
+    for line in text.split('\n'):
+        if (line.startswith('# ') or line.startswith('## ')) and len(current_chunk) > 10:
+            chunks.append((f"chunk_{chunk_index}.tex", "\n".join(current_chunk)))
+            chunk_index += 1
+            current_chunk = []
+        current_chunk.append(line)
+    if current_chunk:
+        chunks.append((f"chunk_{chunk_index}.tex", "\n".join(current_chunk)))
+    return chunks
+
+def generate_chunk(chunk_tuple: tuple[str, str], req: GenerateRequest) -> tuple[str, str]:
+    filename, content = chunk_tuple
     try:
-        base_latex = pypandoc.convert_text(req.input_text, 'latex', format='md')
-    except Exception as e:
-        print("Pandoc conversion failed, falling back to raw text:", e)
+        base_latex = pypandoc.convert_text(content, 'latex', format='md')
+    except Exception:
         base_latex = None
 
-    # 1. Initial Generation
-    initial_prompt = build_prompt(req, base_latex)
-    try:
-        current_latex = _run_ai_generation(initial_prompt)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Initial AI generation failed: {str(e)}")
+    prompt = f"""
+You are an expert LaTeX developer. Convert the following text into compilation-ready LaTeX.
+This is a SECTION of a larger document. DO NOT output \\documentclass or \\begin{{document}}. Only the body LaTeX.
+Output ONLY the raw LaTeX content, no markdown code delimiters (```latex).
+
+TEMPLATE TYPE: {req.template}
+USER INSTRUCTIONS: {req.instructions}
+
+BASE LATEX STRUCTURE:
+{base_latex if base_latex else content}
+"""
+    return filename, _run_ai_generation(prompt)
+
+def generate_main_tex(chunk_filenames: list[str], req: GenerateRequest) -> str:
+    prompt = f"""
+You are an expert LaTeX developer. Generate a main.tex file for a document containing the following included files:
+{', '.join(chunk_filenames)}
+
+Use \\input{{filename}} to include them in the correct order.
+Provide ONLY the raw LaTeX content starting with \\documentclass, NO markdown formatting, NO actual text content inside the document body (only the inputs).
+
+TEMPLATE TYPE: {req.template}
+USER INSTRUCTIONS: {req.instructions}
+TITLE: {req.title or 'Untitled Document'}
+"""
+    return _run_ai_generation(prompt)
+
+@app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
+def generate_and_compile(req: GenerateRequest):
+    is_large = len(req.input_text) > 3000
+    
+    if not is_large:
+        # 0. Pandoc structural pass
+        # Normal flow
+        try:
+            base_latex = pypandoc.convert_text(req.input_text, 'latex', format='md')
+        except Exception as e:
+            print("Pandoc conversion failed, falling back to raw text:", e)
+            base_latex = None
+
+        initial_prompt = build_prompt(req, base_latex)
+        try:
+            current_latex = _run_ai_generation(initial_prompt)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Initial AI generation failed: {str(e)}")
+        additional_files = {}
+    else:
+        # CHUNKING FLOW
+        try:
+            chunks = split_markdown_by_headings(req.input_text)
+            print(f"Splitting huge text into {len(chunks)} chunks.")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(generate_chunk, c, req) for c in chunks]
+                chunk_results = [f.result() for f in concurrent.futures.as_completed(futures)]
+                
+            additional_files = {filename: content for filename, content in chunk_results}
+            current_latex = generate_main_tex(list(additional_files.keys()), req)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chunked parallel generation failed: {str(e)}")
 
     max_retries = 3
     retries = 0
 
     while retries <= max_retries:
         # 2. Compile
-        compile_res_model = compile_latex(CompileRequest(latex_code=current_latex))
+        compile_res_model = compile_latex(CompileRequest(latex_code=current_latex, additional_files=additional_files))
         
         if compile_res_model.success:
             _save_to_supabase(req, current_latex, "success", compile_res_model.pdf_base64)
