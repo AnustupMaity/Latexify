@@ -56,6 +56,15 @@ def extract_latex(text: str) -> str:
     return text.strip()
 
 def build_prompt(req: GenerateRequest, base_latex: str = None) -> str:
+    template_instruction = ""
+    t_lower = req.template.lower()
+    if "ieee" in t_lower:
+        template_instruction = "IMPORTANT: Use \\documentclass[conference]{IEEEtran}. Include standard packages like graphicx, amsmath. Do NOT use standard article."
+    elif "resume" in t_lower:
+        template_instruction = "IMPORTANT: Use a modern resume layout, for example \\documentclass[11pt,a4paper,sans]{moderncv} with \\moderncvstyle{classic} and \\moderncvcolor{blue}, OR a clean article-based resume. Include appropriate sections."
+    elif "beamer" in t_lower or "presentation" in t_lower:
+        template_instruction = "IMPORTANT: Use \\documentclass{beamer} and wrap content in \\begin{frame} ... \\end{frame} blocks."
+    
     if base_latex:
         return f"""
 You are an expert LaTeX developer. I have structurally converted the user's content into safe baseline LaTeX.
@@ -63,6 +72,7 @@ Your job is to apply the exact document constraints/styles below while retaining
 DO NOT break equations or lists. Output ONLY the raw LaTeX code starting with \\documentclass. DO NOT include markdown code fences (```latex).
 
 TEMPLATE TYPE: {req.template}
+{template_instruction}
 USER INSTRUCTIONS: {req.instructions}
 SOURCES/CITATIONS: {req.sources or 'None'}
 
@@ -77,6 +87,7 @@ You are an expert LaTeX developer. Convert the following text into compilation-r
 DO NOT include surrounding markdown formatting like ```latex. Output ONLY the raw LaTeX code starting with \\documentclass.
 
 TEMPLATE TYPE: {req.template}
+{template_instruction}
 USER INSTRUCTIONS: {req.instructions}
 SOURCES/CITATIONS: {req.sources or 'None'}
 
