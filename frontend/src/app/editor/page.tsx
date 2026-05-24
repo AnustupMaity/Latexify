@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, Loader2, ImagePlus, X } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -12,6 +12,8 @@ export default function EditorPage() {
   const [title, setTitle] = useState("Untitled Document");
   const [inputText, setInputText] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [sources, setSources] = useState("");
+  const [images, setImages] = useState<string[]>([]);
   const [state, setState] = useState<GenerationState>("idle");
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [latexCode, setLatexCode] = useState<string | null>(null);
@@ -55,8 +57,27 @@ export default function EditorPage() {
     }
   }, []);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImages(prev => [...prev, event.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleGenerate = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() && images.length === 0) return;
     setState("generating");
     setErrorMsg(null);
     setPdfBase64(null);
@@ -71,6 +92,8 @@ export default function EditorPage() {
           instructions: instructions,
           template: "standard",
           title: title,
+          images: images.length > 0 ? images : undefined,
+          sources: sources.trim() ? sources : undefined
         }),
       });
 
@@ -168,7 +191,7 @@ export default function EditorPage() {
             </>
           )}
           <button
-            disabled={isGenerating || !inputText.trim()}
+            disabled={isGenerating || (!inputText.trim() && images.length === 0)}
             onClick={handleGenerate}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -195,24 +218,67 @@ export default function EditorPage() {
 
           <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto hidden-scrollbar">
             {/* Input Text Area */}
-            <div className="flex-1 flex flex-col group">
+            <div className="flex flex-col group min-h-[200px]">
               <label className="text-xs font-medium text-muted-foreground mb-2">Text / Markdown</label>
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Write your research abstract, equations, or assignment here..."
-                className="flex-1 w-full bg-card/20 border border-border/50 rounded-lg p-4 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow focus:bg-card/40 min-h-[300px]"
+                className="w-full bg-card/20 border border-border/50 rounded-lg p-4 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow focus:bg-card/40 min-h-[200px]"
+              />
+            </div>
+
+            {/* Math/Image OCR Upload */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium text-muted-foreground mb-2">Math/Image OCR (Upload Screenshots)</label>
+              <div className="w-full border-2 border-dashed border-border/50 rounded-lg p-4 flex flex-col items-center justify-center bg-card/10 hover:bg-card/30 transition-colors relative cursor-pointer">
+                <input 
+                  type="file" 
+                  multiple 
+                  accept="image/*" 
+                  onChange={handleImageUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                  title="Upload images"
+                />
+                <ImagePlus className="w-6 h-6 text-muted-foreground mb-2" />
+                <span className="text-xs text-muted-foreground">Click or Drag & Drop images here</span>
+              </div>
+              {images.length > 0 && (
+                <div className="flex gap-2 mt-2 overflow-x-auto pb-2">
+                  {images.map((img, i) => (
+                    <div key={i} className="relative w-16 h-16 rounded-md overflow-hidden border border-border group shrink-0">
+                      <img src={img} alt="upload preview" className="w-full h-full object-cover" />
+                      <button 
+                        onClick={() => removeImage(i)}
+                        className="absolute top-0 right-0 bg-red-500/80 text-white p-0.5 rounded-bl hover:bg-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Bibliography Area */}
+            <div className="flex flex-col">
+              <label className="text-xs font-medium text-muted-foreground mb-2">Sources / Bibliography</label>
+              <textarea
+                value={sources}
+                onChange={(e) => setSources(e.target.value)}
+                placeholder="Paste URLs, DOIs, or raw citations here to generate a BibTeX automatically..."
+                className="w-full bg-card/20 border border-border/50 rounded-lg p-4 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow min-h-[100px]"
               />
             </div>
 
             {/* Instructions Panel */}
-            <div className="h-40 flex flex-col">
+            <div className="flex flex-col">
               <label className="text-xs font-medium text-muted-foreground mb-2">AI Instructions</label>
               <textarea
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="E.g., Format it as an IEEE research paper. Use the authblk package for authors..."
-                className="flex-1 w-full bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow"
+                className="w-full bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 transition-shadow min-h-[100px]"
               />
             </div>
           </div>
