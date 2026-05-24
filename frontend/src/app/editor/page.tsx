@@ -35,7 +35,11 @@ export default function EditorPage() {
       const docId = params.get("id");
       if (docId) {
         setState("loading_history");
-        fetch(`${API_BASE}/api/documents/${docId}`)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const headers: Record<string,string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        fetch(`${API_BASE}/api/documents/${docId}`, { headers })
           .then((res) => res.json())
           .then((data) => {
             if (data && !data.detail) {
@@ -90,9 +94,13 @@ export default function EditorPage() {
     setLatexCode(null);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: Record<string,string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/api/generate-and-compile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           input_text: inputText,
           instructions: instructions,

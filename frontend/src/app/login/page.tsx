@@ -58,7 +58,11 @@ export default function LoginPage() {
         throw new Error(data.detail || "Invalid code.");
       }
       
-      // Success! Proceed to dashboard
+      // Store token and proceed to dashboard
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("email", email);
+      }
       window.location.href = "/dashboard";
     } catch (err: any) {
       setErrorMsg(err.message);

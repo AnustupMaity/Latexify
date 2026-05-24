@@ -1,19 +1,31 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, Clock, Settings, LayoutTemplate, Plus, Search, Filter } from "lucide-react";
+import { FileText, Clock, LayoutTemplate, Plus, Search, Filter } from "lucide-react";
+import API_BASE from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+type DocItem = {
+  id: number;
+  title?: string;
+  status?: string;
+  created_at?: string;
+};
 
-export default async function HistoryPage() {
-  let documents: any[] = [];
-  try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const res = await fetch(`${apiBase}/api/documents?limit=50`, { cache: "no-store" });
-    if (res.ok) {
-      documents = await res.json();
-    }
-  } catch (error) {
-    console.error("Failed to fetch documents:", error);
-  }
+export default function HistoryPage() {
+  const [documents, setDocuments] = useState<DocItem[]>([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${API_BASE}/api/documents?limit=50`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDocuments(Array.isArray(data) ? data : []))
+      .catch((error) => console.error("Failed to fetch documents:", error));
+  }, []);
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -85,10 +97,8 @@ export default async function HistoryPage() {
                      <span className={`text-xs px-2 py-1 rounded-md font-medium ${doc.status === 'success' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-500'}`}>
                        {doc.status === 'success' ? 'Success' : 'Failed'}
                      </span>
-                     <Link href={`/editor?id=${doc.id}`} passHref>
-                       <button className="text-xs font-medium text-blue-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                          Open
-                       </button>
+                     <Link href={`/editor?id=${doc.id}`} className="text-xs font-medium text-blue-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Open
                      </Link>
                   </div>
                 </div>

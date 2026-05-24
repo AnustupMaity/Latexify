@@ -1,20 +1,31 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Clock, LayoutTemplate, Plus } from "lucide-react";
 import LogoutButton from "./LogoutButton";
+import API_BASE from "@/lib/api";
+type DocItem = {
+  id: number;
+  title?: string;
+  status?: string;
+  created_at?: string;
+};
 
-export const dynamic = "force-dynamic";
+export default function DashboardPage() {
+  const [documents, setDocuments] = useState<DocItem[]>([]);
 
-export default async function DashboardPage() {
-  let documents: any[] = [];
-  try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const res = await fetch(`${apiBase}/api/documents`, { cache: "no-store" });
-    if (res.ok) {
-      documents = await res.json();
-    }
-  } catch (error) {
-    console.error("Failed to fetch documents:", error);
-  }
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${API_BASE}/api/documents`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDocuments(Array.isArray(data) ? data : []))
+      .catch((error) => console.error("Failed to fetch documents:", error));
+  }, []);
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">

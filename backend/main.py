@@ -3,7 +3,10 @@ import re
 import requests
 import pypandoc
 import concurrent.futures
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -14,10 +17,21 @@ load_dotenv()
 
 app = FastAPI(title="LaTeXify AI API")
 
-# Allow CORS for development
+def _parse_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    if origins:
+        return origins
+    frontend_url = os.getenv("FRONTEND_URL")
+    defaults = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    if frontend_url:
+        defaults.append(frontend_url.strip())
+    return defaults
+
+# Configurable CORS for production and local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_parse_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -270,7 +284,7 @@ def _run_ai_generation(prompt: str, images: list[str] | None = None) -> str:
                 pass
     return extract_latex(call_huggingface_fallback(prompt))
 
-def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_base64: str | None = None):
+def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_base64: str | None = None, user_email: str | None = None):
     if not supabase: return
     try:
         # Simplistic title extraction from request, or use provided title
@@ -283,6 +297,8 @@ def _save_to_supabase(req: GenerateRequest, latex_code: str, status: str, pdf_ba
             "pdf_base64": pdf_base64,
             "status": status
         }
+        if user_email:
+            data["user_email"] = user_email
         supabase.table("Documents").insert(data).execute()
     except Exception as e:
         err = str(e)
@@ -363,7 +379,7 @@ TITLE: {req.title or 'Untitled Document'}
     return _run_ai_generation(prompt)
 
 @app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
-def generate_and_compile(req: GenerateRequest):
+def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_current_user_email)):
     is_large = len(req.input_text) > 3000
     
     additional_files = {}
@@ -413,7 +429,7 @@ def generate_and_compile(req: GenerateRequest):
         compile_res_model = compile_latex(CompileRequest(latex_code=current_latex, additional_files=additional_files))
         
         if compile_res_model.success:
-            _save_to_supabase(req, current_latex, "success", compile_res_model.pdf_base64)
+            _save_to_supabase(req, current_latex, "success", compile_res_model.pdf_base64, user_email)
             return GenerateCompileResponse(
                 success=True,
                 final_latex=current_latex,
@@ -437,7 +453,7 @@ Fix the errors so it compiles properly. Output ONLY the corrected raw LaTeX code
             try:
                 current_latex = _run_ai_generation(fix_prompt)
             except Exception as e:
-                _save_to_supabase(req, current_latex, "error")
+                _save_to_supabase(req, current_latex, "error", None, user_email)
                 return GenerateCompileResponse(
                     success=False,
                     final_latex=current_latex,
@@ -447,7 +463,7 @@ Fix the errors so it compiles properly. Output ONLY the corrected raw LaTeX code
         
         retries += 1
 
-    _save_to_supabase(req, current_latex, "error")
+    _save_to_supabase(req, current_latex, "error", None, user_email)
     # If all retries exhausted and still failed
     return GenerateCompileResponse(
         success=False,
@@ -458,8 +474,9 @@ Fix the errors so it compiles properly. Output ONLY the corrected raw LaTeX code
 
 import random
 
-# Simple in-memory OTP store for MVP (email -> string code)
+# In-memory OTP fallback store (email -> {code, exp})
 OTP_STORE = {}
+OTP_EXPIRY_MINUTES = 10
 
 class SendOtpRequest(BaseModel):
     email: str
@@ -471,6 +488,19 @@ class VerifyOtpRequest(BaseModel):
 class AuthResponse(BaseModel):
     success: bool
     message: str
+    token: str | None = None
+
+JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-jwt-key")
+security = HTTPBearer()
+
+def get_current_user_email(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        return payload.get("email")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
@@ -483,7 +513,28 @@ def send_otp(req: SendOtpRequest):
     
     # Generate 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
-    OTP_STORE[req.email] = otp_code
+    normalized_email = req.email.lower().strip()
+    expiry_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=OTP_EXPIRY_MINUTES)
+    stored_in_db = False
+    if supabase:
+        try:
+            supabase.table("otp_codes").upsert(
+                {
+                    "email": normalized_email,
+                    "otp_code": otp_code,
+                    "expires_at": expiry_at.isoformat(),
+                    "created_at": datetime.datetime.utcnow().isoformat(),
+                },
+                on_conflict="email",
+            ).execute()
+            stored_in_db = True
+        except Exception as e:
+            print(f"OTP db upsert failed, using memory fallback: {e}")
+    if not stored_in_db:
+        OTP_STORE[normalized_email] = {
+            "code": otp_code,
+            "exp": expiry_at,
+        }
     
     # Call Brevo REST API
     url = "https://api.brevo.com/v3/smtp/email"
@@ -513,56 +564,92 @@ def send_otp(req: SendOtpRequest):
 
 @app.post("/api/auth/verify-otp", response_model=AuthResponse)
 def verify_otp(req: VerifyOtpRequest):
-    stored_otp = OTP_STORE.get(req.email)
-    
-    if not stored_otp:
-        raise HTTPException(status_code=400, detail="No OTP requested for this email.")
-        
-    if stored_otp == req.token:
-        # Clear the token after use
-        del OTP_STORE[req.email]
-        return AuthResponse(success=True, message="OTP verified successfully.")
+    normalized_email = req.email.lower().strip()
+    now_utc = datetime.datetime.utcnow()
+    matched = False
+    if supabase:
+        try:
+            db_resp = (
+                supabase.table("otp_codes")
+                .select("email, otp_code, expires_at")
+                .eq("email", normalized_email)
+                .limit(1)
+                .execute()
+            )
+            row = db_resp.data[0] if db_resp.data else None
+            if row:
+                expires_at_raw = row.get("expires_at")
+                expires_at = None
+                if isinstance(expires_at_raw, str):
+                    expires_at = datetime.datetime.fromisoformat(expires_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+                if expires_at and now_utc > expires_at:
+                    raise HTTPException(status_code=400, detail="Verification code expired.")
+                matched = row.get("otp_code") == req.token
+                if matched:
+                    supabase.table("otp_codes").delete().eq("email", normalized_email).execute()
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"OTP db read failed, trying memory fallback: {e}")
+    if not matched:
+        mem_row = OTP_STORE.get(normalized_email)
+        if mem_row:
+            if now_utc > mem_row["exp"]:
+                del OTP_STORE[normalized_email]
+                raise HTTPException(status_code=400, detail="Verification code expired.")
+            matched = mem_row["code"] == req.token
+            if matched:
+                del OTP_STORE[normalized_email]
+
+    if matched:
+        # Create JWT token valid for 7 days
+        token = jwt.encode(
+            {"email": normalized_email, "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7)},
+            JWT_SECRET,
+            algorithm="HS256"
+        )
+        return AuthResponse(success=True, message="OTP verified successfully.", token=token)
     else:
-        raise HTTPException(status_code=400, detail="Invalid verification code.")
+        raise HTTPException(status_code=400, detail="Invalid verification code or no OTP requested.")
 
 @app.get("/api/documents")
-def get_documents(limit: int = 10):
+def get_documents(limit: int = 10, user_email: str = Depends(get_current_user_email)):
     if not supabase:
         return []   # Supabase not configured — return empty instead of crashing
     try:
-        response = supabase.table("Documents").select("id, title, status, created_at").order("id", desc=True).limit(limit).execute()
+        response = supabase.table("Documents").select("id, title, status, created_at").eq("user_email", user_email).order("id", desc=True).limit(limit).execute()
         return response.data
     except Exception as e:
         err = str(e)
-        # If table doesn't exist yet, return empty gracefully
-        if "PGRST205" in err or "does not exist" in err or "schema cache" in err:
+        # If table doesn't exist yet or user_email column missing, try fallback
+        if "PGRST205" in err or "does not exist" in err or "schema cache" in err or "user_email" in err:
             try:
-                response = supabase.table("documents").select("id, title, status, created_at").order("id", desc=True).limit(limit).execute()
+                response = supabase.table("documents").select("id, title, status, created_at").eq("user_email", user_email).order("id", desc=True).limit(limit).execute()
                 return response.data
             except Exception as e2:
-                print("Warning: Documents/documents table not found. Run the SQL migration in Supabase Dashboard.")
+                print("Warning: Documents table not found or missing user_email column.", e2)
                 return []
         raise HTTPException(status_code=500, detail=err)
 
 @app.get("/api/documents/{doc_id}")
-def get_document(doc_id: int):
+def get_document(doc_id: int, user_email: str = Depends(get_current_user_email)):
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     try:
-        response = supabase.table("Documents").select("*").eq("id", doc_id).execute()
+        response = supabase.table("Documents").select("*").eq("id", doc_id).eq("user_email", user_email).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Document not found")
         return response.data[0]
     except Exception as e:
         err = str(e)
-        if "relation" in err or "does not exist" in err or "schema cache" in err:
+        if "relation" in err or "does not exist" in err or "schema cache" in err or "user_email" in err:
             try:
-                response = supabase.table("documents").select("*").eq("id", doc_id).execute()
+                response = supabase.table("documents").select("*").eq("id", doc_id).eq("user_email", user_email).execute()
                 if not response.data:
                     raise HTTPException(status_code=404, detail="Document not found")
                 return response.data[0]
-            except Exception:
-                raise HTTPException(status_code=404, detail="Document not found / Table missing")
+            except Exception as e2:
+                raise HTTPException(status_code=404, detail="Document not found")
         raise HTTPException(status_code=500, detail=err)
 
 @app.post("/api/auth/logout", response_model=AuthResponse)

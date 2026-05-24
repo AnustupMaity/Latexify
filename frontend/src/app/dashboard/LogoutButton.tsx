@@ -11,7 +11,8 @@ export default function LogoutButton() {
     } catch (e) {
       console.error("Logout failed", e);
     }
-    localStorage.removeItem("authToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("email");
     window.location.href = "/login";
   };
 
