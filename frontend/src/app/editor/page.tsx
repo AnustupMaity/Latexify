@@ -21,11 +21,17 @@ export default function EditorPage() {
   const [retries, setRetries] = useState(0);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [template, setTemplate] = useState("standard");
 
   useEffect(() => {
     // Check if ID is in the URL to load a specific document
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const urlTemplate = params.get("template");
+      if (urlTemplate) {
+        setTemplate(urlTemplate);
+      }
+      
       const docId = params.get("id");
       if (docId) {
         setState("loading_history");
@@ -90,7 +96,7 @@ export default function EditorPage() {
         body: JSON.stringify({
           input_text: inputText,
           instructions: instructions,
-          template: "standard",
+          template: template,
           title: title,
           images: images.length > 0 ? images : undefined,
           sources: sources.trim() ? sources : undefined
@@ -159,17 +165,22 @@ export default function EditorPage() {
               />
               <span className="text-sm font-semibold text-muted-foreground mr-1">.tex</span>
             </div>
-            <span className="text-xs text-muted-foreground">
-              {state === "success" && retries > 0
-                ? `✅ Compiled after ${retries} auto-fix${retries > 1 ? "es" : ""}`
-                : state === "success"
-                ? "✅ Compiled successfully"
-                : state === "error"
-                ? "❌ Compilation failed"
-                : state === "generating"
-                ? "⚙️ Self-healing loop running..."
-                : "Draft Mode"}
-            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded font-medium capitalize">
+                {template.replace(/_/g, ' ')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {state === "success" && retries > 0
+                  ? `✅ Compiled after ${retries} auto-fix${retries > 1 ? "es" : ""}`
+                  : state === "success"
+                  ? "✅ Compiled successfully"
+                  : state === "error"
+                  ? "❌ Compilation failed"
+                  : state === "generating"
+                  ? "⚙️ Self-healing loop running..."
+                  : "Draft Mode"}
+              </span>
+            </div>
           </div>
         </div>
 
