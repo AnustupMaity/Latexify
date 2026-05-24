@@ -1,89 +1,194 @@
-# LaTeXify AI 🤖📝
+# LaTeXify AI
 
-[![Live App](https://img.shields.io/badge/Live_App-latexify--mu.vercel.app-green?style=for-the-badge&logo=vercel)](https://latexify-mu.vercel.app/)
+LaTeXify AI is a production-ready platform that converts plain text, notes, references, and screenshots into compile-ready LaTeX and PDF.
 
-**LaTeXify AI** is a self-healing, agentic AI platform that instantly converts user text, notes, and instructions into high-quality, natively compiled LaTeX code and PDFs. 
+It is built for users who want fast output, fewer LaTeX errors, and a reliable generation-to-compilation workflow.
 
-It doesn't just generate code — if the LaTeX TeX Live compiler throws an error, the backend automatically captures the log, feeds it back to the AI, and patches the code until it compiles perfectly.
+## Live Deployment
 
----
+- Frontend (Vercel): `https://latexify-mu.vercel.app`
+- Backend (Render): `https://latexify-backend.onrender.com`
 
-## 🏗️ Architecture & Deployment
+## What It Does
 
-LaTeXify AI is built as a complete Monorepo encompassing both the frontend application and the self-healing compilation engine.
+- Converts raw text/markdown into high-quality LaTeX
+- Compiles LaTeX into PDF on the backend
+- Auto-retries/fixes LaTeX when compilation fails
+- Supports references and BibTeX generation
+- Supports image-assisted generation and LaTeX figure inclusion
+- Stores generation history per user
 
-- **[🖥️ Frontend](https://latexify-mu.vercel.app/):** Built using **Next.js 15 (App Router)** and **Tailwind CSS v4**. It utilizes an aesthetic glassmorphism UI and dynamically fetches history and compilation states.
-  - **Deployed on:** [Vercel](https://vercel.com) (Serverless Edge)
-  
-- **[⚙️ Backend](https://latexify-backend.onrender.com):** A **FastAPI Python** engine containing the AI fallback chain model (Gemini Pro → HuggingFace) and a native TeX Live environment via `pdflatex` to process document builds securely and quickly using `subprocess`.
-  - **Deployed on:** [Render.com](https://render.com) (Docker Runtime Environment)
-  
-- **[🗄️ Database]:** **Supabase (PostgreSQL)** is utilized to store generation histories, documents, and compile statuses.
-  
-- **[📧 Authentication]:** A custom-built secure Email OTP flow powered natively by the **Brevo REST API**, bypassing standard third-party magic links.
+## Architecture
 
----
+### Frontend
 
-## ✨ Key Features
+- Next.js (App Router), React, Tailwind CSS
+- OTP login flow
+- Editor with:
+  - text input
+  - image upload
+  - sources/bibliography input
+  - PDF preview + `.tex` source view
 
-1. **AI-Powered Code Generation:** Pass abstract notes or assignment requirements, and get precise LaTeX structures tailored to parameters (e.g., IEEE format, standard format).
-2. **Self-Healing Loop Engine:** LaTeX is notoriously difficult to compile manually. If the backend `pdflatex` engine encounters an error, the log is piped directly back to the AI to auto-fix and retry (up to 3 iterations).
-3. **Live PDF Preview:** Integrated embedded PDF `<Iframe>` viewers straight in the browser.
-4. **Secure OTP Handlers:** Passwordless 6-digit PIN login managed directly between Python and Brevo.
-5. **No Docker-in-Docker required:** Fully containerized backend image utilizing a base Ubuntu image bundled with both Python & native TeX Live distribution.
+### Backend
 
----
+- FastAPI + Uvicorn
+- Multi-model generation fallback:
+  1. Gemini 2.5 Pro
+  2. Gemini 2.5 Flash
+  3. Hugging Face fallback model
+- Native LaTeX compile pipeline (`pdflatex`, `bibtex`)
+- Pandoc structural pass before AI formatting
 
-## 🚀 Running Locally
+### Database
 
-### 1. Requirements
-Ensure you have the following installed on your machine:
-- Node.js (v18+)
-- Python (3.10+)
-- Postgres/Supabase instance
-- TeX Live (if running the Python engine locally natively without Docker)
+- Supabase PostgreSQL
+- Stores documents/history and OTP records
+- Row Level Security (RLS) enabled and hardened
 
-### 2. Environment Variables
+## Updated Generation Pipeline
 
-You will need to set up the following keys across your environments.
+### 1) Pandoc structural normalization
 
-**`frontend/.env.local`**
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-NEXT_PUBLIC_API_URL=http://localhost:8000
+Input markdown/text is first converted with Pandoc (`pypandoc`) to generate a safer baseline LaTeX structure.  
+This improves consistency before AI styling/transformation.
+
+### 2) AI generation with template constraints
+
+AI receives:
+- baseline structure
+- template choice (IEEE/resume/beamer/standard)
+- user instructions
+- optional source context
+- optional image context
+
+### 3) Image handling that compiles
+
+Uploaded base64 images are now materialized as real files in the compile workspace (for example `uploaded_image_1.png`), so LaTeX `\includegraphics{...}` references are actually resolvable during compilation.
+
+### 4) Large-document chunking
+
+For large inputs:
+- content is split by markdown headings
+- chunks are generated in parallel
+- chunk output order is normalized before assembly
+- final `main.tex` is created using deterministic chunk ordering
+
+### 5) Bibliography flow
+
+If sources are provided:
+- backend generates `references.bib`
+- compile flow runs:
+  1. `pdflatex`
+  2. `bibtex`
+  3. `pdflatex`
+  4. `pdflatex`
+
+This resolves references reliably in the output PDF.
+
+### 6) Self-healing compile loop
+
+If compile fails, log output is fed back to AI for correction and retry (up to configured attempts).
+
+## Security and Data Controls
+
+- JWT-based authentication for protected APIs
+- User-scoped document reads/writes
+- Supabase RLS enabled
+- Broad table grants revoked for `anon`/`authenticated`
+- Service-role-only access policies for backend-managed tables
+- CORS allowlist is environment-driven (`CORS_ORIGINS`)
+- OTPs support persistent storage in Supabase (`otp_codes`) with expiry and in-memory fallback
+
+## Repository Structure
+
+```text
+.
+├─ backend/
+│  ├─ main.py
+│  ├─ Dockerfile
+│  └─ requirements.txt
+├─ frontend/
+│  ├─ src/app/...
+│  └─ package.json
+├─ database.sql
+├─ render.yaml
+└─ README.md
 ```
 
-**`backend/.env`**
+## Environment Variables
+
+### Backend (`backend/.env` or Render env vars)
+
 ```env
-GEMINI_API_KEY=your_gemini_key
-HUGGINGFACE_API_KEY=your_hf_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role
-SUPABASE_DB_URL=your_postgres_connection_string
-BREVO_API_KEY=your_brevo_api
-BREVO_SENDER_EMAIL=your_verified_brevo_sender_email
+GEMINI_API_KEY=
+HUGGINGFACE_API_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+BREVO_API_KEY=
+BREVO_SENDER_EMAIL=
+JWT_SECRET=
+CORS_ORIGINS=https://latexify-mu.vercel.app
+FRONTEND_URL=https://latexify-mu.vercel.app
 ```
 
-### 3. Start the Application
+### Frontend (`frontend/.env.local` or Vercel env vars)
 
-**Start the Backend (FastAPI)**
+```env
+NEXT_PUBLIC_API_URL=https://latexify-backend.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+## Database Setup
+
+Run [database.sql](d:/CODES/Latexify/database.sql) in Supabase SQL Editor to create/update:
+
+- `public."Documents"` (+ `user_email`)
+- optional lowercase `public.documents` compatibility path
+- `public.otp_codes`
+- RLS/security policies and grants
+
+## Local Development
+
+### Backend
+
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows use: .\venv\Scripts\activate
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+# source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-**Start the Frontend (Next.js)**
+### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Visit [`http://localhost:3000`](http://localhost:3000)
+App: `http://localhost:3000`
 
----
-*Created by [Anustup Maity](https://github.com/AnustupMaity)*
+## Deployment Notes
+
+- Backend is deployed from [render.yaml](d:/CODES/Latexify/render.yaml) using [backend/Dockerfile](d:/CODES/Latexify/backend/Dockerfile)
+- Ensure Render env vars include `CORS_ORIGINS` and `JWT_SECRET`
+- Ensure Vercel frontend points to the Render backend URL
+
+## Current Product Strengths (Buyer Summary)
+
+- Full-stack deployed SaaS with working auth, generation, compilation, and history
+- Handles real LaTeX workflows: templates, citations, and PDF rendering
+- Robust fallback strategy across multiple LLM providers
+- Security posture improved with RLS and scoped backend access
+- Extensible architecture for teams, premium templates, and enterprise controls
+
+## Author
+
+Anustup Maity  
+GitHub: `https://github.com/AnustupMaity`
