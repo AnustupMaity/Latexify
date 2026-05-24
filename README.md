@@ -1,5 +1,5 @@
 # LaTeXify AI
-
+https://latexify-mu.vercel.app/
 LaTeXify AI is a production-ready platform that converts plain text, notes, references, and screenshots into compile-ready LaTeX and PDF.
 
 It is built for users who want fast output, fewer LaTeX errors, and a reliable generation-to-compilation workflow.
