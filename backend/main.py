@@ -207,7 +207,7 @@ import base64
 
 class CompileRequest(BaseModel):
     latex_code: str
-    additional_files: dict[str, str] = {}
+    additional_files: dict[str, str | bytes] = {}
 
 class CompileResponse(BaseModel):
     success: bool
@@ -223,16 +223,43 @@ def compile_latex(req: CompileRequest):
             f.write(req.latex_code)
             
         for filename, content in req.additional_files.items():
-            with open(os.path.join(temp_dir, filename), 'w', encoding='utf-8') as f:
-                f.write(content)
+            file_path = os.path.join(temp_dir, filename)
+            if isinstance(content, bytes):
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+            else:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
 
         try:
+            # First latex pass
             result = subprocess.run(
                 ["pdflatex", "-interaction=nonstopmode", "-output-directory", temp_dir, tex_file_path],
                 capture_output=True,
                 text=True,
                 timeout=60
             )
+            # Bibliography passes if bib file exists
+            if "references.bib" in req.additional_files:
+                subprocess.run(
+                    ["bibtex", "document"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=temp_dir
+                )
+                subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", temp_dir, tex_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", "-output-directory", temp_dir, tex_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
 
             pdf_path = os.path.join(temp_dir, 'document.pdf')
             if os.path.exists(pdf_path):
@@ -254,7 +281,7 @@ def compile_latex(req: CompileRequest):
         except FileNotFoundError:
             raise HTTPException(
                 status_code=500,
-                detail="pdflatex not found. Make sure TeX Live is installed in the environment."
+                detail="LaTeX toolchain not found (pdflatex/bibtex). Make sure TeX Live is installed in the environment."
             )
         except subprocess.TimeoutExpired:
             raise HTTPException(status_code=500, detail="Compilation timed out after 60 seconds.")
@@ -271,11 +298,15 @@ def _run_ai_generation(prompt: str, images: list[str] | None = None) -> str:
     contents = [prompt]
     if images:
         for b64 in images:
+            mime_type = "image/jpeg"
             if "," in b64:
-                b64 = b64.split(",", 1)[1]
+                header, body = b64.split(",", 1)
+                b64 = body
+                if ";" in header and ":" in header:
+                    mime_type = header.split(":", 1)[1].split(";", 1)[0]
             try:
                 img_bytes = base64.b64decode(b64)
-                contents.append(types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
+                contents.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
             except Exception as e:
                 print(f"Failed to decode image: {e}")
 
@@ -338,6 +369,40 @@ def split_markdown_by_headings(text: str) -> list[tuple[str, str]]:
         chunks.append((f"chunk_{chunk_index}.tex", "\n".join(current_chunk)))
     return chunks
 
+def _image_extension_from_mime(mime_type: str) -> str:
+    mime_map = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/bmp": "bmp",
+    }
+    return mime_map.get(mime_type.lower(), "jpg")
+
+def _materialize_uploaded_images(images: list[str] | None) -> tuple[dict[str, bytes], list[str]]:
+    files: dict[str, bytes] = {}
+    names: list[str] = []
+    if not images:
+        return files, names
+    for idx, raw in enumerate(images, start=1):
+        data = raw
+        mime_type = "image/jpeg"
+        if "," in raw:
+            header, body = raw.split(",", 1)
+            data = body
+            if ";" in header and ":" in header:
+                mime_type = header.split(":", 1)[1].split(";", 1)[0]
+        try:
+            decoded = base64.b64decode(data)
+            ext = _image_extension_from_mime(mime_type)
+            filename = f"uploaded_image_{idx}.{ext}"
+            files[filename] = decoded
+            names.append(filename)
+        except Exception as e:
+            print(f"Skipping invalid uploaded image #{idx}: {e}")
+    return files, names
+
 def _generate_bibtex(sources: str) -> str:
     prompt = f"""
 You are an expert academic librarian. I will provide a list of URLs, DOIs, or raw text references.
@@ -395,7 +460,9 @@ TITLE: {req.title or 'Untitled Document'}
 def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_current_user_email)):
     is_large = len(req.input_text) > 3000
     
-    additional_files = {}
+    additional_files: dict[str, str | bytes] = {}
+    image_files, image_names = _materialize_uploaded_images(req.images)
+    additional_files.update(image_files)
     if req.sources:
         try:
             bibtex_content = _generate_bibtex(req.sources)
@@ -413,7 +480,14 @@ def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_cur
             print("Pandoc conversion failed, falling back to raw text:", e)
             base_latex = None
 
-        initial_prompt = build_prompt(req, base_latex)
+        image_instruction = ""
+        if image_names:
+            image_instruction = (
+                "\nAVAILABLE IMAGE FILES FOR LATEX \\includegraphics:\n"
+                + "\n".join([f"- {n}" for n in image_names])
+                + "\nIf relevant, include figures using these exact filenames."
+            )
+        initial_prompt = build_prompt(req, base_latex) + image_instruction
         try:
             current_latex = _run_ai_generation(initial_prompt, req.images)
         except Exception as e:
@@ -427,10 +501,14 @@ def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_cur
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [executor.submit(generate_chunk, c, req) for c in chunks]
                 chunk_results = [f.result() for f in concurrent.futures.as_completed(futures)]
-                
+
+            # Preserve original chunk order for deterministic document assembly.
+            chunk_results.sort(key=lambda x: int(x[0].split("_")[1].split(".")[0]))
+            chunk_filenames: list[str] = []
             for filename, content in chunk_results:
                 additional_files[filename] = content
-            current_latex = generate_main_tex(list(additional_files.keys()), req)
+                chunk_filenames.append(filename)
+            current_latex = generate_main_tex(chunk_filenames, req)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Chunked parallel generation failed: {str(e)}")
 
