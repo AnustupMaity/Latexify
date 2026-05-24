@@ -49,6 +49,19 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANO
 supabase: Client | None = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-jwt-key")
+security = HTTPBearer()
+
+def get_current_user_email(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        return payload.get("email")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 class GenerateRequest(BaseModel):
     input_text: str
     instructions: str = ""
@@ -489,18 +502,6 @@ class AuthResponse(BaseModel):
     success: bool
     message: str
     token: str | None = None
-
-JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-jwt-key")
-security = HTTPBearer()
-
-def get_current_user_email(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
-        return payload.get("email")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
