@@ -456,6 +456,39 @@ TITLE: {req.title or 'Untitled Document'}
 """
     return _run_ai_generation(prompt)
 
+def _ensure_image_blocks(latex_code: str, image_names: list[str]) -> str:
+    if not latex_code or not image_names:
+        return latex_code
+
+    updated = latex_code
+    if "\\usepackage{graphicx}" not in updated and "\\documentclass" in updated:
+        updated = re.sub(
+            r"(\\documentclass[^\n]*\n)",
+            r"\1\\usepackage{graphicx}\n",
+            updated,
+            count=1,
+        )
+
+    missing = [img for img in image_names if img not in updated]
+    if not missing:
+        return updated
+
+    figure_blocks = "\n".join(
+        [
+            "\\begin{figure}[h!]\n\\centering\n"
+            f"\\includegraphics[width=0.85\\linewidth]{{{img}}}\n"
+            f"\\caption{{Uploaded image: {img}}}\n"
+            "\\end{figure}"
+            for img in missing
+        ]
+    )
+
+    if "\\end{document}" in updated:
+        updated = updated.replace("\\end{document}", figure_blocks + "\n\\end{document}")
+    else:
+        updated += "\n" + figure_blocks
+    return updated
+
 @app.post("/api/generate-and-compile", response_model=GenerateCompileResponse)
 def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_current_user_email)):
     is_large = len(req.input_text) > 3000
@@ -490,6 +523,7 @@ def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_cur
         initial_prompt = build_prompt(req, base_latex) + image_instruction
         try:
             current_latex = _run_ai_generation(initial_prompt, req.images)
+            current_latex = _ensure_image_blocks(current_latex, image_names)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Initial AI generation failed: {str(e)}")
     else:
@@ -509,6 +543,7 @@ def generate_and_compile(req: GenerateRequest, user_email: str = Depends(get_cur
                 additional_files[filename] = content
                 chunk_filenames.append(filename)
             current_latex = generate_main_tex(chunk_filenames, req)
+            current_latex = _ensure_image_blocks(current_latex, image_names)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Chunked parallel generation failed: {str(e)}")
 
@@ -543,6 +578,7 @@ Fix the errors so it compiles properly. Output ONLY the corrected raw LaTeX code
 """
             try:
                 current_latex = _run_ai_generation(fix_prompt)
+                current_latex = _ensure_image_blocks(current_latex, image_names)
             except Exception as e:
                 _save_to_supabase(req, current_latex, "error", None, user_email)
                 return GenerateCompileResponse(
@@ -683,7 +719,7 @@ def verify_otp(req: VerifyOtpRequest):
     if matched:
         # Create JWT token valid for 7 days
         token = jwt.encode(
-            {"email": normalized_email, "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7)},
+            {"email": normalized_email, "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)},
             JWT_SECRET,
             algorithm="HS256"
         )

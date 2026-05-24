@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Play, RotateCcw, Download, FileText, FileCode2, AlertCircle, Loader2, ImagePlus, X } from "lucide-react";
+import { clearSessionAndRedirect, isTokenExpired } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,6 +27,11 @@ export default function EditorPage() {
   useEffect(() => {
     // Check if ID is in the URL to load a specific document
     if (typeof window !== "undefined") {
+      const sessionToken = localStorage.getItem("token");
+      if (!sessionToken || isTokenExpired(sessionToken)) {
+        clearSessionAndRedirect();
+        return;
+      }
       const params = new URLSearchParams(window.location.search);
       const urlTemplate = params.get("template");
       if (urlTemplate) {
@@ -40,8 +46,15 @@ export default function EditorPage() {
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
         fetch(`${API_BASE}/api/documents/${docId}`, { headers })
-          .then((res) => res.json())
+          .then(async (res) => {
+            if (res.status === 401) {
+              clearSessionAndRedirect();
+              return null;
+            }
+            return res.json();
+          })
           .then((data) => {
+            if (!data) return;
             if (data && !data.detail) {
               setTitle(data.title || "Untitled Document");
               setInputText(data.input_text || "");
@@ -112,6 +125,10 @@ export default function EditorPage() {
       });
 
       const data = await res.json();
+      if (res.status === 401) {
+        clearSessionAndRedirect();
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(data.detail || "Generation failed.");

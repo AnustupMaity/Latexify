@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut } from "lucide-react";
+import { clearSessionAndRedirect } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,9 +12,7 @@ export default function LogoutButton() {
     } catch (e) {
       console.error("Logout failed", e);
     }
-    localStorage.removeItem("token");
-    localStorage.removeItem("email");
-    window.location.href = "/login";
+    clearSessionAndRedirect();
   };
 
   return (

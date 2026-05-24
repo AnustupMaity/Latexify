@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FileText, Clock, LayoutTemplate, Plus } from "lucide-react";
 import LogoutButton from "./LogoutButton";
 import API_BASE from "@/lib/api";
+import { clearSessionAndRedirect, isTokenExpired } from "@/lib/auth";
 type DocItem = {
   id: number;
   title?: string;
@@ -17,12 +18,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token || isTokenExpired(token)) {
+      clearSessionAndRedirect();
+      return;
+    }
     fetch(`${API_BASE}/api/documents`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
     })
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => {
+        if (res.status === 401) {
+          clearSessionAndRedirect();
+          return [];
+        }
+        return res.ok ? res.json() : [];
+      })
       .then((data) => setDocuments(Array.isArray(data) ? data : []))
       .catch((error) => console.error("Failed to fetch documents:", error));
   }, []);

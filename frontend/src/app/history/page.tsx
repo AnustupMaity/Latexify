@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Clock, LayoutTemplate, Plus, Search, Filter } from "lucide-react";
 import API_BASE from "@/lib/api";
+import { clearSessionAndRedirect, isTokenExpired } from "@/lib/auth";
 
 type DocItem = {
   id: number;
@@ -17,12 +18,21 @@ export default function HistoryPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token || isTokenExpired(token)) {
+      clearSessionAndRedirect();
+      return;
+    }
     fetch(`${API_BASE}/api/documents?limit=50`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
     })
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => {
+        if (res.status === 401) {
+          clearSessionAndRedirect();
+          return [];
+        }
+        return res.ok ? res.json() : [];
+      })
       .then((data) => setDocuments(Array.isArray(data) ? data : []))
       .catch((error) => console.error("Failed to fetch documents:", error));
   }, []);
