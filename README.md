@@ -65,7 +65,7 @@
 - Stores documents/history and OTP records
 - Row Level Security (RLS) enabled and hardened
 
-## Updated Generation Pipeline
+##  Generation Pipeline
 
 ### 1) Pandoc structural normalization
 
