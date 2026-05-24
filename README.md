@@ -1,9 +1,28 @@
 # LaTeXify AI
 
-LaTeXify AI is a production-ready platform that converts plain text, notes, references, and screenshots into compile-ready LaTeX and PDF.
+<p align="center">
+  <a href="https://latexify-mu.vercel.app/">
+    <img src="https://img.shields.io/badge/Live%20Demo-Vercel-black?style=for-the-badge&logo=vercel" />
+  </a>
+  <a href="https://latexify-mu.vercel.app/">
+    <img src="https://img.shields.io/badge/Open-App-00C853?style=for-the-badge" />
+  </a>
+</p>
 
-It is built for users who want fast output, fewer LaTeX errors, and a reliable generation-to-compilation workflow.
+<p align="center">
+  <img src="https://img.shields.io/badge/AI-Powered-blueviolet?style=flat-square" />
+  <img src="https://img.shields.io/badge/LaTeX-Automation-success?style=flat-square" />
+  <img src="https://img.shields.io/badge/PDF-Generation-orange?style=flat-square" />
+  <img src="https://img.shields.io/badge/Production-Ready-black?style=flat-square" />
+</p>
 
+---
+
+## 🚀 Live Demo
+
+🔗 https://latexify-mu.vercel.app/
+
+---
 ## Live Deployment
 
 - Frontend (Vercel): `https://latexify-mu.vercel.app`
@@ -46,7 +65,7 @@ It is built for users who want fast output, fewer LaTeX errors, and a reliable g
 - Stores documents/history and OTP records
 - Row Level Security (RLS) enabled and hardened
 
-## Updated Generation Pipeline
+##  Generation Pipeline
 
 ### 1) Pandoc structural normalization
 
