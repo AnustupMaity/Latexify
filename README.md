@@ -142,6 +142,7 @@ If compile fails, log output is fed back to AI for correction and retry (up to c
 ```env
 GEMINI_API_KEY=
 HUGGINGFACE_API_KEY=
+HUGGINGFACE_API_URL=https://api-inference.huggingface.co/models/meta-llama/Llama-3.2-3B-Instruct
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 BREVO_API_KEY=

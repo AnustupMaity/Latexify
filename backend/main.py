@@ -39,6 +39,10 @@ app.add_middleware(
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+HUGGINGFACE_API_URL = os.getenv(
+    "HUGGINGFACE_API_URL",
+    "https://api-inference.huggingface.co/models/meta-llama/Llama-3.2-3B-Instruct",
+)
 
 from supabase import create_client, Client
 
@@ -128,20 +132,27 @@ def call_huggingface_fallback(prompt: str) -> str:
     """Fallback generator using HuggingFace Inference API (free)."""
     if not HUGGINGFACE_API_KEY or HUGGINGFACE_API_KEY == "your_hugging_face_key_here":
         raise Exception("Hugging Face API Key is missing.")
-    
-    # Using a capable open-source specific model suited for coding or general tasks
-    API_URL = "https://api-inference.huggingface.co/models/meta-llama/Llama-3.2-3B-Instruct"
+
+    # Keep the fallback configurable so Render/local environments can swap endpoints if needed.
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
     payload = {
         "inputs": prompt,
         "parameters": {"max_new_tokens": 2000, "return_full_text": False}
     }
-    
-    response = requests.post(API_URL, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json()[0]["generated_text"]
-    else:
-        raise Exception(f"HF Error {response.status_code}: {response.text}")
+
+    try:
+        response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        raise Exception(f"Hugging Face request failed: {exc}") from exc
+
+    data = response.json()
+    if isinstance(data, list) and data and "generated_text" in data[0]:
+        return data[0]["generated_text"]
+    if isinstance(data, dict) and data.get("generated_text"):
+        return data["generated_text"]
+
+    raise Exception(f"HF Error {response.status_code}: {response.text}")
 
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate_latex(req: GenerateRequest):
