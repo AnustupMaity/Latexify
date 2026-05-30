@@ -1,32 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-card: #1e293b;
-  --color-card-foreground: #f8fafc;
-  --color-popover: #1e293b;
-  --color-popover-foreground: #f8fafc;
-  --color-primary: #3b82f6;
+  --color-background: #030303;
+  --color-foreground: #f5f5f5;
+  --color-card: #0a0a0a;
+  --color-card-foreground: #f5f5f5;
+  --color-popover: #0a0a0a;
+  --color-popover-foreground: #f5f5f5;
+  --color-primary: #e11d48;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #334155;
-  --color-secondary-foreground: #f8fafc;
-  --color-muted: #334155;
-  --color-muted-foreground: #94a3b8;
-  --color-accent: #60a5fa;
+  --color-secondary: #171717;
+  --color-secondary-foreground: #f5f5f5;
+  --color-muted: #171717;
+  --color-muted-foreground: #a3a3a3;
+  --color-accent: #262626;
   --color-accent-foreground: #ffffff;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: #334155;
-  --color-input: #1e293b;
-  --color-ring: #3b82f6;
-  --radius: 0.5rem;
+  --color-border: #262626;
+  --color-input: #171717;
+  --color-ring: #e11d48;
+  --radius: 0.1rem; /* Sharp, slightly rounded corners for brutalist feel */
 }
 
 /* Set default border colour using raw CSS var — avoids Tailwind v4 scanner triggering
    "border-border" utility lookup inside @layer base */
 *, ::after, ::before {
-  border-color: #334155;
+  border-color: #262626;
 }
 
 body {
@@ -37,42 +37,52 @@ body {
 }
 
 @layer utilities {
-  /* Glassmorphism helpers */
+  /* Stark glassmorphism */
   .glass {
-    background-color: color-mix(in srgb, var(--color-card) 70%, transparent);
-    backdrop-filter: blur(12px);
-    border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    background-color: rgba(10, 10, 10, 0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .glass-panel {
-    background-color: color-mix(in srgb, var(--color-secondary) 40%, transparent);
-    backdrop-filter: blur(16px);
+    background-color: rgba(23, 23, 23, 0.4);
+    backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    transition: all 0.3s ease;
+  }
+  
+  .glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(23, 23, 23, 0.6);
   }
 
-  /* Text glow */
-  .text-glow {
-    text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  /* Dot matrix / Grid backgrounds */
+  .bg-dot-pattern {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .bg-grid-pattern {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  }
+
+  /* Dot matrix text effect */
+  .font-dot {
+    font-family: var(--font-geist-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
   /* Animations */
   @keyframes float {
     0%   { transform: translateY(0px); }
-    50%  { transform: translateY(-10px); }
+    50%  { transform: translateY(-5px); }
     100% { transform: translateY(0px); }
   }
   .animate-float {
-    animation: float 4s ease-in-out infinite;
-  }
-
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: .8; transform: scale(1.05); }
-  }
-  .animate-pulse-glow {
-    animation: pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: float 6s ease-in-out infinite;
   }
 
   /* Hide scrollbar helper */

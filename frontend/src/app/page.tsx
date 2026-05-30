@@ -1,74 +1,92 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles, Wand2, FileText, Settings, ShieldCheck } from "lucide-react";
+import { ArrowRight, Sparkles, Code2, FileText, Settings, ShieldAlert, Cpu } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="relative isolate overflow-hidden bg-background">
-      {/* Background Gradients */}
-      <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80">
-        <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#3b82f6] to-[#93c5fd] opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" />
-      </div>
+    <div className="relative min-h-screen bg-background text-foreground overflow-hidden selection:bg-primary selection:text-white">
+      {/* Dot pattern background */}
+      <div className="absolute inset-0 z-0 bg-dot-pattern opacity-40 pointer-events-none mix-blend-screen" />
+      
+      {/* Vignette effect to darken edges */}
+      <div className="absolute inset-0 z-0 bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none" />
 
-      <div className="px-6 lg:px-8 max-w-7xl mx-auto py-24 sm:py-32 lg:py-40 relative">
-        <div className="text-center animate-float">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 font-medium text-sm mb-8 ring-1 ring-blue-500/20">
-            <Sparkles className="w-4 h-4" />
-            <span>LaTeXify AI 1.0 is here</span>
+      <div className="px-6 lg:px-8 max-w-7xl mx-auto py-24 sm:py-32 lg:py-40 relative z-10 flex flex-col items-center justify-center min-h-[90vh]">
+        <div className="w-full max-w-4xl mx-auto">
+          
+          {/* Badge */}
+          <div className="flex justify-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 border border-primary/40 bg-black/50 text-primary font-dot text-xs tracking-widest backdrop-blur-md">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>LATEXIFY OS [v1.0]</span>
+            </div>
           </div>
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-7xl mb-8">
-            Convert Text → <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500 text-glow">Perfect LaTeX</span> → PDF instantly
+
+          {/* Typography */}
+          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-center leading-[0.9] uppercase mb-8">
+            Raw Text In. <br />
+            <span className="text-primary italic pr-2">Perfect</span> LaTeX Out.
           </h1>
-          <p className="mt-6 text-lg leading-8 text-muted-foreground max-w-3xl mx-auto">
-            The world's first self-healing AI LaTeX platform. Input your text, choose your style, and let AI generate, compile, and fix errors automatically until you have a perfect PDF.
+          
+          <p className="mt-8 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-center font-medium">
+            The self-healing AI compiler. Input natural text, and let the system generate, compile, and automatically fix errors until a flawless PDF is produced.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-x-6">
+
+          {/* Action Buttons */}
+          <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/login"
-              className="rounded-lg bg-blue-600 px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-all hover:scale-105 active:scale-95 group flex items-center gap-2"
+              className="w-full sm:w-auto px-8 py-4 bg-white text-black text-sm font-dot tracking-widest hover:bg-gray-200 transition-colors flex items-center justify-center gap-3 border border-white"
             >
-              Get Started <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              INITIALIZE SYSTEM <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="#features" className="text-sm font-semibold leading-6 text-foreground hover:text-blue-400 transition-colors">
-              Learn more <span aria-hidden="true">→</span>
+            <Link 
+              href="#features" 
+              className="w-full sm:w-auto px-8 py-4 bg-transparent text-white text-sm font-dot tracking-widest hover:bg-white/5 transition-colors flex items-center justify-center gap-2 border border-border"
+            >
+              VIEW SPECS
             </Link>
           </div>
         </div>
+      </div>
 
-        {/* Features Section */}
-        <div id="features" className="mt-32 max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {/* Features Grid */}
+      <div id="features" className="relative z-10 border-t border-border bg-background">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
+            
             {/* Feature 1 */}
-            <div className="glass-panel p-8 rounded-2xl hover:border-blue-500/50 transition-colors group">
-              <div className="bg-blue-500/20 w-12 h-12 rounded-lg flex items-center justify-center mb-6 text-blue-400 group-hover:scale-110 transition-transform">
-                <Wand2 className="w-6 h-6" />
+            <div className="p-10 lg:p-16 group hover:bg-white/[0.02] transition-colors">
+              <div className="mb-8 p-4 border border-border inline-block bg-black">
+                <Cpu className="w-6 h-6 text-foreground group-hover:text-primary transition-colors" />
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-3">AI Generation</h3>
+              <h3 className="text-xl font-bold font-dot mb-4 uppercase">AI Code Gen</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Powered by Google Gemini, we convert your raw text and instructions directly into structured, professional LaTeX code.
+                Powered by Gemini models to convert unstructured text and complex instructions directly into strictly formatted LaTeX syntax.
               </p>
             </div>
 
             {/* Feature 2 */}
-            <div className="glass-panel p-8 rounded-2xl hover:border-indigo-500/50 transition-colors group">
-              <div className="bg-indigo-500/20 w-12 h-12 rounded-lg flex items-center justify-center mb-6 text-indigo-400 group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-6 h-6" />
+            <div className="p-10 lg:p-16 group hover:bg-white/[0.02] transition-colors">
+              <div className="mb-8 p-4 border border-border inline-block bg-black">
+                <ShieldAlert className="w-6 h-6 text-foreground group-hover:text-primary transition-colors" />
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-3">Fixes Errors Automatically</h3>
+              <h3 className="text-xl font-bold font-dot mb-4 uppercase">Auto-Healing</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Our self-healing compiler reads error logs and instructs the AI to fix them. Output is guaranteed to compile perfectly.
+                The compiler intercepts fatal errors and automatically prompts the AI to resolve syntax mistakes until a valid PDF compiles.
               </p>
             </div>
 
             {/* Feature 3 */}
-            <div className="glass-panel p-8 rounded-2xl hover:border-purple-500/50 transition-colors group">
-              <div className="bg-purple-500/20 w-12 h-12 rounded-lg flex items-center justify-center mb-6 text-purple-400 group-hover:scale-110 transition-transform">
-                <FileText className="w-6 h-6" />
+            <div className="p-10 lg:p-16 group hover:bg-white/[0.02] transition-colors">
+              <div className="mb-8 p-4 border border-border inline-block bg-black">
+                <Code2 className="w-6 h-6 text-foreground group-hover:text-primary transition-colors" />
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-3">Beautiful Templates</h3>
+              <h3 className="text-xl font-bold font-dot mb-4 uppercase">Strict Templates</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Start from stunning presets including Resumes, IEEE Research Papers, Assignments, and Modern Beamer Slides.
+                Start from robust configurations designed for IEEE Papers, academic Resumes, University Assignments, and modern presentations.
               </p>
             </div>
+
           </div>
         </div>
       </div>
